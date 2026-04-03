@@ -39,6 +39,8 @@ fetch -q -o - https://raw.githubusercontent.com/zeroznet/picoclaw-wa-fbsd-native
 
 ## Local usage
 
+Run with default options:
+
 ```sh
 ./picoclaw-wa-fbsd-native.sh
 ```
