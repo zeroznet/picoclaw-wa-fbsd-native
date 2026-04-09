@@ -5,14 +5,14 @@ set -eu
 
 UPSTREAM_REPO_URL="https://github.com/sipeed/picoclaw.git"
 DEFAULT_SOURCE_DIR="${HOME}/src/picoclaw"
-DEFAULT_BASE_BRANCH="main"
+DEFAULT_REF="main"
 
 APPLY_SILENT_PATCH=0
 WITH_GOOLM=1
 INSTALL_DEPS=0
 
 SOURCE_DIR="${DEFAULT_SOURCE_DIR}"
-BASE_BRANCH="${DEFAULT_BASE_BRANCH}"
+REF="${DEFAULT_REF}"
 PATCH_BUILD_BRANCH="build-silent-processing"
 
 usage() {
@@ -22,7 +22,8 @@ Usage:
 
 Options:
   --dir PATH           Clone/update upstream PicoClaw into PATH (default: ${DEFAULT_SOURCE_DIR})
-  --branch NAME        Upstream base branch to build from (default: ${DEFAULT_BASE_BRANCH})
+  --ref NAME           Upstream ref (branch or tag) to build from (default: ${DEFAULT_REF})
+  --branch NAME        Legacy alias for --ref
   --apply-pr-2127      Apply a local forward-port of PR #2127 (silent_processing) onto latest upstream
   --without-goolm      Build with tags: stdjson,whatsapp_native (not recommended on current upstream)
   --install-deps       Try to install missing deps with pkg (git go ca_root_nss)
@@ -68,9 +69,14 @@ while [ $# -gt 0 ]; do
       SOURCE_DIR="$2"
       shift 2
       ;;
+    --ref)
+      [ $# -ge 2 ] || die "Missing value for --ref"
+      REF="$2"
+      shift 2
+      ;;
     --branch)
       [ $# -ge 2 ] || die "Missing value for --branch"
-      BASE_BRANCH="$2"
+      REF="$2"
       shift 2
       ;;
     --apply-pr-2127)
@@ -150,6 +156,20 @@ fetch_upstream_refs() {
   git fetch origin --tags --force || die "Failed to fetch origin tags"
 }
 
+resolve_upstream_ref() {
+  if git show-ref --verify --quiet "refs/remotes/origin/${REF}"; then
+    printf '%s' "origin/${REF}"
+    return 0
+  fi
+
+  if git show-ref --verify --quiet "refs/tags/${REF}"; then
+    printf '%s' "refs/tags/${REF}"
+    return 0
+  fi
+
+  die "Upstream ref not found as branch or tag: ${REF}"
+}
+
 clone_or_update_upstream() {
   source_parent=$(dirname "${SOURCE_DIR}")
   mkdir -p "${source_parent}"
@@ -179,22 +199,39 @@ build_tags() {
 
 prepare_repo_state() {
   fetch_upstream_refs
-  git show-ref --verify --quiet "refs/remotes/origin/${BASE_BRANCH}" || die "Upstream branch not found: origin/${BASE_BRANCH}"
+  TARGET_REF=$(resolve_upstream_ref)
+
+  # Treat the source repo as a disposable upstream cache/build tree.
+  # Always discard tracked/untracked changes before switching refs so
+  # repeated --apply-pr-2127 runs stay deterministic.
+  git reset --hard
+  git clean -fd
 
   if [ "${APPLY_SILENT_PATCH}" -eq 1 ]; then
-    log ">>> Creating fresh build branch ${PATCH_BUILD_BRANCH} from origin/${BASE_BRANCH}"
-    git checkout -B "${PATCH_BUILD_BRANCH}" "origin/${BASE_BRANCH}"
+    log ">>> Creating fresh build branch ${PATCH_BUILD_BRANCH} from ${TARGET_REF}"
+    git checkout -B "${PATCH_BUILD_BRANCH}" "${TARGET_REF}"
     git branch --unset-upstream "${PATCH_BUILD_BRANCH}" >/dev/null 2>&1 || true
     return 0
   fi
 
-  log ">>> Resetting local ${BASE_BRANCH} to latest origin/${BASE_BRANCH}"
-  if git show-ref --verify --quiet "refs/heads/${BASE_BRANCH}"; then
-    git checkout "${BASE_BRANCH}"
-  else
-    git checkout -b "${BASE_BRANCH}" "origin/${BASE_BRANCH}"
-  fi
-  git reset --hard "origin/${BASE_BRANCH}"
+  case "${TARGET_REF}" in
+    origin/*)
+      log ">>> Resetting local ${REF} to latest ${TARGET_REF}"
+      if git show-ref --verify --quiet "refs/heads/${REF}"; then
+        git checkout "${REF}"
+      else
+        git checkout -b "${REF}" "${TARGET_REF}"
+      fi
+      git reset --hard "${TARGET_REF}"
+      ;;
+    refs/tags/*)
+      log ">>> Checking out tag ${REF}"
+      git checkout --detach "${TARGET_REF}"
+      ;;
+    *)
+      die "Unsupported resolved target ref: ${TARGET_REF}"
+      ;;
+  esac
 }
 
 apply_silent_processing_patch() {
@@ -207,7 +244,7 @@ apply_silent_processing_patch() {
 
   PATCHER_GO=$(mktemp "${TMPDIR:-/tmp}/picoclaw-silent-patcher.XXXXXX.go")
 
-  cat > "${PATCHER_GO}" <<'EOF'
+  cat > "${PATCHER_GO}" <<'EOF_PATCHER'
 package main
 
 import (
@@ -310,7 +347,7 @@ func main() {
 	)
 	mustWrite(loopPath, loop)
 }
-EOF
+EOF_PATCHER
 
   log ">>> Applying local silent_processing patch via Go patcher"
   if ! go run "${PATCHER_GO}" "${SOURCE_DIR}"; then
@@ -386,7 +423,7 @@ VER=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT=$(git rev-parse --short=8 HEAD 2>/dev/null || echo dev)
 BTIME=$(date +%FT%T%z)
 GOVER=$(go version | awk '{print $3}')
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo detached)
+CURRENT_BRANCH=$(git describe --tags --exact-match 2>/dev/null || git rev-parse --abbrev-ref HEAD 2>/dev/null || echo detached)
 OUT_DIR="${SOURCE_DIR}/build"
 OUT_BIN="${OUT_DIR}/picoclaw-freebsd-amd64"
 OUT_TMP="${OUT_BIN}.new.$$"
