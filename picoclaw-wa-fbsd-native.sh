@@ -2,6 +2,7 @@
 # scripted/written by Robert Bopko (github.com/zeroznet) with Boba Bott (Claude Opus 4.7)
 
 set -eu
+set -o pipefail
 
 UPSTREAM_REPO_URL="https://github.com/sipeed/picoclaw.git"
 DEFAULT_SOURCE_DIR="${HOME}/src/picoclaw"
@@ -107,21 +108,18 @@ maybe_install_deps() {
 
   has_cmd pkg || die "pkg not found; cannot auto-install dependencies"
 
-  PKGS=""
-  has_cmd git || PKGS="${PKGS} git"
-  has_cmd go || PKGS="${PKGS} go"
+  set --
+  has_cmd git || set -- "$@" git
+  has_cmd go || set -- "$@" go
+  pkg info -e ca_root_nss >/dev/null 2>&1 || set -- "$@" ca_root_nss
 
-  if ! pkg info -e ca_root_nss >/dev/null 2>&1; then
-    PKGS="${PKGS} ca_root_nss"
-  fi
+  [ "$#" -gt 0 ] || return 0
 
-  [ -n "${PKGS}" ] || return 0
-
-  log ">>> Installing missing packages:${PKGS}"
+  log ">>> Installing missing packages: $*"
   if has_cmd sudo; then
-    sudo pkg install -y ${PKGS}
+    sudo pkg install -y "$@"
   else
-    pkg install -y ${PKGS}
+    pkg install -y "$@"
   fi
 }
 
@@ -204,6 +202,9 @@ prepare_repo_state() {
   # Treat the source repo as a disposable upstream cache/build tree.
   # Always discard tracked/untracked changes before switching refs so
   # repeated --apply-pr-2127 runs stay deterministic.
+  if [ -n "$(git status --porcelain)" ]; then
+    warn "Discarding local changes in ${SOURCE_DIR}"
+  fi
   git reset --hard
   git clean -fd
 
