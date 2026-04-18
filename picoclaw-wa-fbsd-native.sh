@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# scripted by Robert Bopko (github.com/zeroznet) with Boba Bott (GPT-5.4-Thinking by OpenAI)
+# scripted/written by Robert Bopko (github.com/zeroznet) with Boba Bott (Claude Opus 4.7)
 
 set -eu
 
