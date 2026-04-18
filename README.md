@@ -31,10 +31,10 @@ With auto-install of missing deps:
 fetch -q -o - https://raw.githubusercontent.com/zeroznet/picoclaw-wa-fbsd-native/main/picoclaw-wa-fbsd-native.sh | sh -s -- --install-deps
 ```
 
-With `goolm` enabled:
+With `goolm` disabled (not recommended on current upstream):
 
 ```sh
-fetch -q -o - https://raw.githubusercontent.com/zeroznet/picoclaw-wa-fbsd-native/main/picoclaw-wa-fbsd-native.sh | sh -s -- --with-goolm
+fetch -q -o - https://raw.githubusercontent.com/zeroznet/picoclaw-wa-fbsd-native/main/picoclaw-wa-fbsd-native.sh | sh -s -- --without-goolm
 ```
 
 ## Local usage
@@ -51,11 +51,27 @@ Install missing deps and build:
 ./picoclaw-wa-fbsd-native.sh --install-deps
 ```
 
-Build with upstream-like tags:
+Apply the local silent_processing patch (forward-port of upstream PR #2127) on top of latest upstream and build:
 
 ```sh
-./picoclaw-wa-fbsd-native.sh --with-goolm
+./picoclaw-wa-fbsd-native.sh --apply-pr-2127
 ```
+
+Build a specific upstream ref into a custom directory:
+
+```sh
+./picoclaw-wa-fbsd-native.sh --dir ~/src/picoclaw --ref main
+```
+
+## Options
+
+- `--dir PATH` - clone/update upstream PicoClaw into PATH (default: `~/src/picoclaw`)
+- `--ref NAME` - upstream ref (branch, tag, or commit) to build from (default: `main`)
+- `--branch NAME` - legacy alias for `--ref`
+- `--apply-pr-2127` - apply a local forward-port of PR #2127 (silent_processing) on top of latest upstream
+- `--without-goolm` - build with tags `stdjson,whatsapp_native` (omit `goolm`); not recommended on current upstream
+- `--install-deps` - try to install missing deps with `pkg` (`git`, `go`, `ca_root_nss`)
+- `-h`, `--help` - show usage
 
 ## Files
 
