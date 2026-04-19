@@ -199,9 +199,9 @@ prepare_repo_state() {
   fetch_upstream_refs
   TARGET_REF=$(resolve_upstream_ref)
 
-  # Treat the source repo as a disposable upstream cache/build tree.
+  # Treat the source repo as a disposable upstream cache/build tree
   # Always discard tracked/untracked changes before switching refs so
-  # repeated --apply-pr-2127 runs stay deterministic.
+  # repeated --apply-pr-2127 runs stay deterministic
   if [ -n "$(git status --porcelain)" ]; then
     warn "Discarding local changes in ${SOURCE_DIR}"
   fi
@@ -458,7 +458,7 @@ CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 \
 
 [ -x "${OUT_TMP}" ] || die "Build failed: binary missing or not executable"
 
-# Verify the freshly built binary before replacing the current one.
+# Verify the freshly built binary before replacing the current one
 OUT_BIN_CHECK="${OUT_BIN}"
 OUT_BIN="${OUT_TMP}"
 smoke_test_binary
